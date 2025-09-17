@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net data: blob:; frame-ancestors 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;">
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    <meta name="referrer" content="no-referrer">
+
+    <!-- Import the component -->
+    <script src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.1.1/dist/model-viewer.min.js" type="module"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelViewers = document.querySelectorAll('model-viewer');
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+            modelViewers.forEach(modelViewer => {
+                // Use relative path for environment image to avoid HTTPS issues
+                try {
+                    modelViewer.setAttribute(
+                        "environment-image",
+                        "./env_maps/gradient.jpg"
+                    );
+                } catch (e) {
+                    console.warn('Could not set environment image:', e);
+                    // Fallback to neutral environment
+                    modelViewer.setAttribute("environment-image", "neutral");
+                }
+
+                // Add error handling for model loading
+                modelViewer.addEventListener('error', (event) => {
+                    console.error('Model viewer error:', event);
+                });
+
+                modelViewer.addEventListener('load', () => {
+                    console.log('Model loaded successfully');
+                });
+            });
+        });
+    </script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .centered-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        model-viewer {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+
+<body>
+<div class="centered-container">
+    <div class="column is-mobile is-centered">
+        <model-viewer id="modelviewer" style="height: #height#px; width: #width#px;"
+                      rotation-per-second="10deg"
+                      src="#src#" disable-tap
+                      environment-image="neutral"
+                      camera-target="0m 0m 0m"
+                      camera-orbit="0deg 90deg 8m"
+                      orientation="0deg 0deg 0deg"
+                      shadow-intensity=".9"
+                      ar auto-rotate
+                      camera-controls
+                      loading="eager">
+        </model-viewer>
+    </div>
+</div>
+
+<script>
+    // Add fallback for HTTPS compatibility
+    window.addEventListener('securitypolicyviolation', (e) => {
+        console.warn('Security policy violation:', e.violatedDirective, e.blockedURI);
+    });
+
+    // Ensure proper error handling
+    window.addEventListener('error', (e) => {
+        console.error('Window error:', e.message, e.filename, e.lineno);
+    });
+</script>
+
+</body>
+
+</html>
