@@ -376,8 +376,9 @@ def build_model_viewer_html(save_folder, height=660, width=790, textured=False):
 
     # Add security headers and HTTPS compatibility fixes
     security_headers = '''
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net data: blob:; frame-ancestors 'self';">
-    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    <!-- Allow iframe embedding from any origin -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net data: blob:; frame-ancestors *;">
+    <!-- X-Frame-Options removed to allow iframe embedding -->
     <meta name="referrer" content="no-referrer">
     '''
 
@@ -1144,35 +1145,37 @@ if __name__ == '__main__':
 
     app = FastAPI()
 
+    # Add CORS middleware to allow iframe embedding
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow all origins for iframe embedding
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # Add root path redirect to /app
     @app.get("/")
     async def redirect_to_app():
         return RedirectResponse(url="/4iframe_fast3d", status_code=308)  # 308 Permanent Redirect
-
-    # Add CORS middleware for HTTPS compatibility
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # In production, replace with specific domains
-        allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
 
     # Custom middleware to add security headers only
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next):
         response = await call_next(request)
 
-        # Add security headers for iframe compatibility
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        # Remove X-Frame-Options to allow iframe embedding from any origin
+        # response.headers["X-Frame-Options"] = "SAMEORIGIN"  # Commented out to allow iframe embedding
         response.headers["X-Content-Type-Options"] = "nosniff"
+        # Add Content-Security-Policy to allow embedding from any origin
+        response.headers["Content-Security-Policy"] = "frame-ancestors *;"
         response.headers["Referrer-Policy"] = "no-referrer"
 
         # For static files served in iframes
         if request.url.path.startswith("/static/"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net data: blob:; "
-                "frame-ancestors 'self'; "
+                "frame-ancestors *; "
                 "img-src 'self' data: blob:; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;"
             )
@@ -1185,10 +1188,43 @@ if __name__ == '__main__':
     app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
     shutil.copytree('./assets/env_maps', os.path.join(static_dir, 'env_maps'), dirs_exist_ok=True)
 
+    # Serve manifest.json at root
+    @app.get("/manifest.json")
+    async def serve_manifest():
+        manifest_path = Path("manifest.json")
+        if manifest_path.exists():
+            with open(manifest_path, "r") as f:
+                import json
+                return Response(content=json.dumps(json.load(f)), media_type="application/json")
+        return Response(content='{"name": "Fast3D"}', media_type="application/json")
+
+    # Serve font files if they exist
+    @app.get("/{font_file:path}.woff2")
+    async def serve_fonts(font_file: str):
+        # Try to find font in common locations
+        font_paths = [
+            Path(f"./assets/fonts/{font_file}.woff2"),
+            Path(f"./static/{font_file}.woff2"),
+            Path(f"{static_dir}/{font_file}.woff2")
+        ]
+        for font_path in font_paths:
+            if font_path.exists():
+                with open(font_path, "rb") as f:
+                    return Response(content=f.read(), media_type="font/woff2")
+        # Return empty font file to avoid 404 errors
+        return Response(content=b"", media_type="font/woff2", status_code=204)
+
     if args.low_vram_mode:
         torch.cuda.empty_cache()
     demo = build_app()
-    app = gr.mount_gradio_app(app, demo, path="/4iframe_fast3d")
+    # Mount Gradio app with iframe embedding enabled
+    app = gr.mount_gradio_app(
+        app,
+        demo,
+        path="/4iframe_fast3d",
+        allowed_paths=["/4iframe_fast3d"],
+        app_kwargs={"allowed_paths": ["/4iframe_fast3d"]}
+    )
     # Configure SSL and HTTPS if requested
     ssl_config = None
     if args.ssl or args.auto_ssl:
